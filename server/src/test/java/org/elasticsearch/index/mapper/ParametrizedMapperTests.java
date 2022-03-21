@@ -13,7 +13,9 @@ import org.elasticsearch.Version;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.lucene.Lucene;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentHelper;
+import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.analysis.AnalyzerScope;
 import org.elasticsearch.index.analysis.IndexAnalyzers;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
@@ -93,7 +95,7 @@ public class ParametrizedMapperTests extends MapperServiceTestCase {
         final Parameter<StringWrapper> wrapper = new Parameter<>("wrapper", false, () -> new StringWrapper("default"), (n, c, o) -> {
             if (o == null) return null;
             return new StringWrapper(o.toString());
-        }, m -> toType(m).wrapper).setSerializer((b, n, v) -> b.field(n, v.name), v -> "wrapper_" + v.name);
+        }, m -> toType(m).wrapper, (b, n, v) -> b.field(n, v.name), v -> "wrapper_" + v.name);
         final Parameter<Integer> intValue = Parameter.intParam("int_value", true, m -> toType(m).intValue, 5).addValidator(n -> {
             if (n > 50) {
                 throw new IllegalArgumentException("Value of [n] cannot be greater than 50");
@@ -251,6 +253,8 @@ public class ParametrizedMapperTests extends MapperServiceTestCase {
             Collections.emptyMap()
         );
         when(mapperService.getIndexAnalyzers()).thenReturn(indexAnalyzers);
+        IndexSettings indexSettings = createIndexSettings(version, Settings.EMPTY);
+        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
         MappingParserContext pc = new MappingParserContext(s -> null, s -> {
             if (Objects.equals("keyword", s)) {
                 return KeywordFieldMapper.PARSER;
@@ -267,7 +271,7 @@ public class ParametrizedMapperTests extends MapperServiceTestCase {
             ScriptCompiler.NONE,
             mapperService.getIndexAnalyzers(),
             mapperService.getIndexSettings(),
-            IdFieldMapper.NO_FIELD_DATA
+            mapperService.getIndexSettings().getMode().buildNoFieldDataIdFieldMapper()
         );
         if (fromDynamicTemplate) {
             pc = new MappingParserContext.DynamicTemplateParserContext(pc);

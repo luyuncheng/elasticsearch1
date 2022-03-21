@@ -23,7 +23,6 @@ import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LazySoftDeletesDirectoryReaderWrapper;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.LiveIndexWriterConfig;
@@ -80,6 +79,7 @@ import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Mapping;
 import org.elasticsearch.index.mapper.MappingLookup;
 import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.index.mapper.ProvidedIdFieldMapper;
 import org.elasticsearch.index.mapper.SeqNoFieldMapper;
 import org.elasticsearch.index.mapper.SourceFieldMapper;
 import org.elasticsearch.index.mapper.SourceToParse;
@@ -388,8 +388,8 @@ public abstract class EngineTestCase extends ESTestCase {
         BytesReference source,
         Mapping mappingUpdate,
         boolean recoverySource
-    ) {
-        Field uidField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
+    ) { // TODO try with TsdbIdFieldMapper
+        Field uidField = new Field("_id", Uid.encodeId(id), ProvidedIdFieldMapper.Defaults.FIELD_TYPE);
         Field versionField = new NumericDocValuesField("_version", 0);
         SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
         document.add(uidField);
@@ -1082,8 +1082,7 @@ public abstract class EngineTestCase extends ESTestCase {
     ) throws IOException {
         final Engine.Operation lastOp = ops.get(ops.size() - 1);
         final String lastFieldValue;
-        if (lastOp instanceof Engine.Index) {
-            Engine.Index index = (Engine.Index) lastOp;
+        if (lastOp instanceof Engine.Index index) {
             lastFieldValue = index.docs().get(0).get("value");
         } else {
             // delete
@@ -1243,9 +1242,9 @@ public abstract class EngineTestCase extends ESTestCase {
                 }
             }
             docs.sort(
-                Comparator.comparingLong(DocIdSeqNoAndSource::getSeqNo)
-                    .thenComparingLong(DocIdSeqNoAndSource::getPrimaryTerm)
-                    .thenComparing((DocIdSeqNoAndSource::getId))
+                Comparator.comparingLong(DocIdSeqNoAndSource::seqNo)
+                    .thenComparingLong(DocIdSeqNoAndSource::primaryTerm)
+                    .thenComparing((DocIdSeqNoAndSource::id))
             );
             return docs;
         }
@@ -1582,11 +1581,9 @@ public abstract class EngineTestCase extends ESTestCase {
             return ((LazySoftDeletesDirectoryReaderWrapper.LazySoftDeletesFilterLeafReader) reader).getLiveDocs();
         } else if (reader instanceof LazySoftDeletesDirectoryReaderWrapper.LazySoftDeletesFilterCodecReader) {
             return ((LazySoftDeletesDirectoryReaderWrapper.LazySoftDeletesFilterCodecReader) reader).getLiveDocs();
-        } else if (reader instanceof FilterLeafReader) {
-            final FilterLeafReader fReader = (FilterLeafReader) reader;
+        } else if (reader instanceof final FilterLeafReader fReader) {
             return lazyBits(FilterLeafReader.unwrap(fReader));
-        } else if (reader instanceof FilterCodecReader) {
-            final FilterCodecReader fReader = (FilterCodecReader) reader;
+        } else if (reader instanceof final FilterCodecReader fReader) {
             return lazyBits(FilterCodecReader.unwrap(fReader));
         } else if (reader instanceof SegmentReader) {
             return null;
