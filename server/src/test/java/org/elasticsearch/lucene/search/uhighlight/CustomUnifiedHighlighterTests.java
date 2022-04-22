@@ -455,12 +455,6 @@ public class CustomUnifiedHighlighterTests extends ESTestCase {
         }
     }
     public void testExceedMaxAnalyzedOffsetWithRepeatedWords() throws Exception {
-//        TermQuery query = new TermQuery(new Term("text", "testing"));
-//        Analyzer analyzer = new WhitespaceAnalyzer();
-//        final Integer queryMaxAnalyzedOffset = 6;
-//        assertHighlightOneDoc("text", new String[] {"testing testing testing hahaha"},
-//            analyzer, query, Locale.ROOT, BreakIterator.getSentenceInstance(Locale.ROOT), 0, new String[] {"<b>testing</b> testin"},
-//            56, queryMaxAnalyzedOffset, UnifiedHighlighter.OffsetSource.POSTINGS);
 
         TermQuery query = new TermQuery(new Term("text", "hahaha"));
         Analyzer analyzer = new WhitespaceAnalyzer();
