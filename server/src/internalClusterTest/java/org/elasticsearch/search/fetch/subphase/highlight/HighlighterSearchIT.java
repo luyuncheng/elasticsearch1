@@ -2030,7 +2030,7 @@ public class HighlighterSearchIT extends ESIntegTestCase {
         response = client().prepareSearch("test").highlighter(new HighlightBuilder().field(field)).get();
         assertNotHighlighted(response, 0, "text");
 
-        // When noMatchSize is between 0 and the size of the string?
+        // When noMatchSize is between 0 and the size of the string
         field.highlighterType("plain").noMatchSize(21);
         response = client().prepareSearch("test").highlighter(new HighlightBuilder().field(field)).get();
         assertHighlight(response, 0, "text", 0, 1, equalTo("I am pretty long so"));

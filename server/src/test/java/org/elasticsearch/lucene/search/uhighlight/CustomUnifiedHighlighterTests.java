@@ -479,7 +479,9 @@ public class CustomUnifiedHighlighterTests extends ESTestCase {
             Locale.ROOT,
             BreakIterator.getSentenceInstance(Locale.ROOT),
             0,
-            new String[] { "testing <b>hahaha</b> testing <b>hahaha</b>" },
+            // OLD Strategy would
+            // new String[] { "testing <b>hahaha</b> testing <b>hahaha</b>" },
+            new String[] { "testing <b>hahaha</b> testing hahaha" },
             29,
             10,
             UnifiedHighlighter.OffsetSource.POSTINGS

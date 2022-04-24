@@ -36,6 +36,7 @@ class CustomFieldHighlighter extends FieldHighlighter {
     private final Locale breakIteratorLocale;
     private final int noMatchSize;
     private String fieldValue;
+    private final Integer queryMaxAnalyzedOffset;
 
     CustomFieldHighlighter(
         String field,
@@ -46,11 +47,13 @@ class CustomFieldHighlighter extends FieldHighlighter {
         int maxPassages,
         int maxNoHighlightPassages,
         PassageFormatter passageFormatter,
-        int noMatchSize
+        int noMatchSize,
+        Integer queryMaxAnalyzedOffset
     ) {
         super(field, fieldOffsetStrategy, breakIterator, passageScorer, maxPassages, maxNoHighlightPassages, passageFormatter);
         this.breakIteratorLocale = breakIteratorLocale;
         this.noMatchSize = noMatchSize;
+        this.queryMaxAnalyzedOffset = queryMaxAnalyzedOffset;
     }
 
     FieldOffsetStrategy getFieldOffsetStrategy() {
@@ -106,6 +109,10 @@ class CustomFieldHighlighter extends FieldHighlighter {
     @Override
     protected Passage[] highlightOffsetsEnums(OffsetsEnum off) throws IOException {
 
+        OffsetsEnum wrapOff = off;
+        if (queryMaxAnalyzedOffset != null) {
+            wrapOff = new LimitedOffsetsEnum(off, queryMaxAnalyzedOffset);
+        }
         final int contentLength = this.breakIterator.getText().getEndIndex();
 
         if (off.nextPosition() == false) {
@@ -143,10 +150,10 @@ class CustomFieldHighlighter extends FieldHighlighter {
                 passage.setEndOffset(Math.min(this.breakIterator.following(start), contentLength));
             }
             // Add this term to the passage.
-            BytesRef term = off.getTerm();// a reference; safe to refer to
+            BytesRef term = wrapOff.getTerm();// a reference; safe to refer to
             assert term != null;
-            passage.addMatch(start, end, term, off.freq());
-        } while (off.nextPosition());
+            passage.addMatch(start, end, term, wrapOff.freq());
+        } while (wrapOff.nextPosition());
         maybeAddPassage(passageQueue, passageScorer, passage, contentLength);
 
         Passage[] passages = passageQueue.toArray(new Passage[passageQueue.size()]);
