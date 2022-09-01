@@ -7,17 +7,20 @@
 
 package org.elasticsearch.xpack.spatial.index.fielddata;
 
+import org.apache.lucene.document.ShapeField;
+import org.apache.lucene.geo.LatLonGeometry;
+import org.apache.lucene.geo.Point;
 import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.Orientation;
 import org.elasticsearch.geometry.Geometry;
-import org.elasticsearch.geometry.Rectangle;
 import org.elasticsearch.geometry.utils.GeographyValidator;
 import org.elasticsearch.geometry.utils.WellKnownText;
 import org.elasticsearch.index.mapper.GeoShapeIndexer;
 import org.elasticsearch.search.aggregations.support.ValuesSourceType;
 import org.elasticsearch.xcontent.ToXContentFragment;
 import org.elasticsearch.xcontent.XContentBuilder;
-import org.elasticsearch.xpack.spatial.index.mapper.BinaryGeoShapeDocValuesField;
+import org.elasticsearch.xpack.spatial.index.mapper.BinaryShapeDocValuesField;
 import org.elasticsearch.xpack.spatial.search.aggregations.support.GeoShapeValuesSourceType;
 
 import java.io.IOException;
@@ -88,11 +91,13 @@ public abstract class GeoShapeValues {
         private final GeometryDocValueReader reader;
         private final BoundingBox boundingBox;
         private final Tile2DVisitor tile2DVisitor;
+        private final LatLonGeometryRelationVisitor component2DRelationVisitor;
 
         public GeoShapeValue() {
             this.reader = new GeometryDocValueReader();
             this.boundingBox = new BoundingBox();
             this.tile2DVisitor = new Tile2DVisitor();
+            this.component2DRelationVisitor = new LatLonGeometryRelationVisitor(CoordinateEncoder.GEO);
         }
 
         /**
@@ -107,14 +112,47 @@ public abstract class GeoShapeValues {
             return boundingBox;
         }
 
-        public GeoRelation relate(Rectangle rectangle) throws IOException {
-            int minX = CoordinateEncoder.GEO.encodeX(rectangle.getMinX());
-            int maxX = CoordinateEncoder.GEO.encodeX(rectangle.getMaxX());
-            int minY = CoordinateEncoder.GEO.encodeY(rectangle.getMinY());
-            int maxY = CoordinateEncoder.GEO.encodeY(rectangle.getMaxY());
+        /**
+         * Select a label position that is within the shape.
+         */
+        public GeoPoint labelPosition() throws IOException {
+            // For polygons we prefer to use the centroid, as long as it is within the polygon
+            if (reader.getDimensionalShapeType() == DimensionalShapeType.POLYGON) {
+                Component2DVisitor visitor = Component2DVisitor.getVisitor(
+                    LatLonGeometry.create(new Point(lat(), lon())),
+                    ShapeField.QueryRelation.INTERSECTS,
+                    CoordinateEncoder.GEO
+                );
+                reader.visit(visitor);
+                if (visitor.matches()) {
+                    return new GeoPoint(lat(), lon());
+                }
+            }
+            // For all other cases, use the first triangle (or line or point) in the tree which will always intersect the shape
+            LabelPositionVisitor<GeoPoint> visitor = new LabelPositionVisitor<>(CoordinateEncoder.GEO, (x, y) -> new GeoPoint(y, x));
+            reader.visit(visitor);
+            return visitor.labelPosition();
+        }
+
+        /**
+         * Determine the {@link GeoRelation} between the current shape and a bounding box provided in
+         * the encoded space.
+         */
+        public GeoRelation relate(int minX, int maxX, int minY, int maxY) throws IOException {
             tile2DVisitor.reset(minX, minY, maxX, maxY);
             reader.visit(tile2DVisitor);
             return tile2DVisitor.relation();
+        }
+
+        /**
+         * Determine the {@link GeoRelation} between the current shape and a {@link LatLonGeometry}. It only supports
+         * simple geometries, therefore it will fail if the LatLonGeometry is a {@link org.apache.lucene.geo.Rectangle}
+         * that crosses the dateline.
+         */
+        public GeoRelation relate(LatLonGeometry latLonGeometry) throws IOException {
+            component2DRelationVisitor.reset(latLonGeometry);
+            reader.visit(component2DRelationVisitor);
+            return component2DRelationVisitor.relation();
         }
 
         public DimensionalShapeType dimensionalShapeType() {
@@ -142,7 +180,7 @@ public abstract class GeoShapeValues {
         public static GeoShapeValue missing(String missing) {
             try {
                 final Geometry geometry = WellKnownText.fromWKT(GeographyValidator.instance(true), true, missing);
-                final BinaryGeoShapeDocValuesField field = new BinaryGeoShapeDocValuesField("missing");
+                final BinaryShapeDocValuesField field = new BinaryShapeDocValuesField("missing", CoordinateEncoder.GEO);
                 field.add(MISSING_GEOSHAPE_INDEXER.indexShape(geometry), geometry);
                 final GeoShapeValue value = new GeoShapeValue();
                 value.reset(field.binaryValue());

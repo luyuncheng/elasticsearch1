@@ -66,6 +66,7 @@ import static org.elasticsearch.xpack.searchablesnapshots.cache.shared.SharedByt
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 @ESIntegTestCase.ClusterScope(supportsDedicatedMasters = false, numClientNodes = 0)
@@ -245,14 +246,22 @@ public abstract class BaseSearchableSnapshotsIntegTestCase extends AbstractSnaps
                     indexExists,
                     translogExists
                 );
-                assertThat(snapshotDirectory, not(indexExists));
-                assertTrue(translogExists);
+                assertThat(
+                    snapshotDirectory ? "Index file should not exist" : "Index file should exist",
+                    indexExists,
+                    not(snapshotDirectory)
+                );
+                assertThat("Translog should exist", translogExists, is(true));
                 try (Stream<Path> dir = Files.list(shardPath.resolveTranslog())) {
                     final long translogFiles = dir.filter(path -> path.getFileName().toString().contains("translog")).count();
                     if (snapshotDirectory) {
-                        assertEquals(2L, translogFiles);
+                        assertThat("There should be 2 translog files for a snapshot directory", translogFiles, equalTo(2L));
                     } else {
-                        assertThat(translogFiles, greaterThanOrEqualTo(2L));
+                        assertThat(
+                            "There should be 2+ translog files for a non-snapshot directory",
+                            translogFiles,
+                            greaterThanOrEqualTo(2L)
+                        );
                     }
                 }
             }
