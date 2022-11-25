@@ -84,7 +84,8 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         DIRECT("direct"),
         FIXED("fixed"),
         FIXED_AUTO_QUEUE_SIZE("fixed_auto_queue_size"), // TODO: remove in 9.0
-        SCALING("scaling");
+        SCALING("scaling"),
+        SCALING_FIXED_QUEUE("scaling_fixed_queue");
 
         private final String type;
 
@@ -113,7 +114,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
         entry(Names.GENERIC, ThreadPoolType.SCALING),
         entry(Names.GET, ThreadPoolType.FIXED),
         entry(Names.ANALYZE, ThreadPoolType.FIXED),
-        entry(Names.WRITE, ThreadPoolType.FIXED),
+        entry(Names.WRITE, ThreadPoolType.SCALING_FIXED_QUEUE),
         entry(Names.SEARCH, ThreadPoolType.FIXED),
         entry(Names.SEARCH_COORDINATION, ThreadPoolType.FIXED),
         entry(Names.MANAGEMENT, ThreadPoolType.SCALING),
@@ -186,7 +187,10 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
             Names.GENERIC,
             new ScalingExecutorBuilder(Names.GENERIC, 4, genericThreadPoolMax, TimeValue.timeValueSeconds(30), false)
         );
-        builders.put(Names.WRITE, new FixedExecutorBuilder(settings, Names.WRITE, allocatedProcessors, 10000, false));
+        builders.put(
+            Names.WRITE,
+            new ScalingFixedQueueExecutorBuilder(Names.WRITE, halfProcMaxAt10, allocatedProcessors, 10000, TimeValue.timeValueSeconds(30))
+        );
         builders.put(Names.GET, new FixedExecutorBuilder(settings, Names.GET, allocatedProcessors, 1000, false));
         builders.put(Names.ANALYZE, new FixedExecutorBuilder(settings, Names.ANALYZE, 1, 16, false));
         builders.put(Names.SEARCH, new FixedExecutorBuilder(settings, Names.SEARCH, searchThreadPoolSize(allocatedProcessors), 1000, true));
@@ -821,7 +825,7 @@ public class ThreadPool implements ReportingService<ThreadPoolInfo>, Scheduler {
             builder.startObject(name);
             builder.field("type", type.getType());
 
-            if (type == ThreadPoolType.SCALING) {
+            if (type == ThreadPoolType.SCALING || type == ThreadPoolType.SCALING_FIXED_QUEUE) {
                 assert min != -1;
                 builder.field("core", min);
                 assert max != -1;
